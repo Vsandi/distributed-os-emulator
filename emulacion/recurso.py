@@ -1,9 +1,12 @@
-from multiprocessing import Array
+from multiprocessing import Array, Value
+from ctypes import c_char, c_int
 
 class Recurso:
     def __init__(self, nombre:str):
         self.nombre = nombre
-        self.data = Array('c', 255, lock=False)
+        self.len = Value(c_int, lock=False)
+        self.len.value = 0
+        self.data = Array(c_char, 256, lock=False)
 
 class SolicitudRecurso:
     def __init__(self, nodo:str, recurso:str):

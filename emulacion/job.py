@@ -1,5 +1,5 @@
 from typing import List
-from fail import Fail
+from emulacion.fail import Fail
 
 class Job:
     def __init__(self, nombre:str, tiempo:float, recursos:List[str], fails:List[Fail], tiempo_completado:float):

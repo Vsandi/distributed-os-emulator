@@ -1,5 +1,5 @@
-from clases.job import Job
-from clases.recurso import Recurso
+from emulacion.job import Job
+from emulacion.recurso import Recurso
 from typing import List
 from multiprocessing import connection
 
