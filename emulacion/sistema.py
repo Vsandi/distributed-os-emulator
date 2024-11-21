@@ -21,14 +21,13 @@ class EstadoSistema:
 
 class Sistema:
     def __init__(self, nombre:str, recursos:List[Recurso], pipe_trabajos:connection,
-                cola_reportes_maestro:connection, conexion_solicitudes:connection, conexion_recursos:connection):
+                cola_reportes_maestro:connection, conexion_solicitudes:connection):
         self.nombre = nombre
         self.estado = EstadoSistema()
         self.recursos = recursos
         self.pipe_trabajos = pipe_trabajos 
         self.cola_reportes_maestro = cola_reportes_maestro
         self.conexion_solicitudes = conexion_solicitudes
-        self.conexion_recursos = conexion_recursos
     
     def reportar_estado(self):
         print(f"Estado del sistema '{self.nombre}': {self.estado}")
