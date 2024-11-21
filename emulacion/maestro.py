@@ -1,18 +1,23 @@
-from typing import List
+from typing import List, Dict
 import time
 import multiprocessing
+from emulacion.sistema import EstadoSistema
 from emulacion.recurso import Recurso, SolicitudRecurso
 from emulacion.job import Job
 from lector_script import instruccion
 
 class Nodo:
     def __init__(self, nombre:str, queue_aviso_recurso:multiprocessing.connection, 
-                pipe_trabajos:multiprocessing.connection, trabajos_asignados:float, carga_asignada:float):
+                pipe_trabajos:multiprocessing.connection):
         self.queue_aviso_recurso = queue_aviso_recurso
         self.pipe_trabajos = pipe_trabajos
-        self.trabajos_asignados = trabajos_asignados
-        self.carga_asignada = carga_asignada
+        self.trabajos_asignados = []
+        self.carga_asignada = 0
         self.tiempo_sin_conexion = 0
+
+    def set_estado(self, estado: EstadoSistema):
+        self.carga_asignada = estado.get_carga()
+        self.trabajos_asignados = estado.cola_procesos.append(estado.current_job)
 
 class SistemaMaestro():
     def __init__(self, nodos:List[str], recursos:List[str], instrucciones:List[instruccion.Instruccion], timeout:int):
@@ -28,12 +33,16 @@ class SistemaMaestro():
         self.locks_recursos = {recurso: False for recurso in recursos}
 
         # Inicializar Nodos
-        self.nodos = {}
+        self.nodos: Dict[str, Nodo] = {}
         for nodo in nodos:
             self.agregar_nodo(nodo)
 
+        # Registro de Jobs sin Asignar
         self.cola_procesos_sin_asignar = []
-        
+
+        # Registro Jobs Asignados: Backup ante fallos de sistemas
+        self.procesos_asignados = {nodo: [] for nodo in nodo}
+
         timeout_counter = 0
 
         while True:
@@ -50,18 +59,15 @@ class SistemaMaestro():
                     elif inst.tipo == instruccion.TipoInstruccion.JOB:
                         self.cola_procesos_sin_asignar.append(Job(inst))
             
+            # Asignar Trabajos Segun Carga
             while len(self.cola_procesos_sin_asignar) != 0:
-                pass
+                self.asignar_job(self.cola_procesos_sin_asignar.pop())
 
             # Manejar llegada de estados
             while not self.conexion_estado.empty():
                 nombre, estado = self.conexion_estado.get()
                 self.nodos[nombre].tiempo_sin_conexion = 0
-
-            for nombre in self.nodos:
-                self.nodos[nombre].tiempo_sin_conexion += 1
-                if self.nodos[nombre].tiempo_sin_conexion == timeout:
-                    self.eliminar_nodo(nombre)
+                self.nodos[nombre].set_estado(estado)
 
             # Manejar solicitudes recursos
             while not self.cola_solicitudes_recursos:
@@ -69,9 +75,22 @@ class SistemaMaestro():
                 self.manejar_solicitud_recurso(solicitud)
 
             # Revisar jobs
+            for nodo in nodos:
+                if self.nodos[nombre].pipe_trabajos.poll():
+                    job = self.nodos[nombre].pipe_trabajos.recv()
+                    self.finalizar_job(job)
+                    
+            # TODO Revisar final del loop 
+
 
             time.sleep(1)
+            for nombre in nodos:
+                self.nodos[nombre].tiempo_sin_conexion += 1
+                if self.nodos[nombre].tiempo_sin_conexion == timeout:
+                    self.eliminar_nodo(nombre)
             timeout_counter = max(0, timeout_counter-1)
+
+        # Epilogo
 
     
     def agregar_nodo(self, nombre:str):
@@ -82,10 +101,16 @@ class SistemaMaestro():
         # TODO: implementar lógica
         pass
 
-    def manejar_solicitud_recurso(solicitud:SolicitudRecurso):
+    def manejar_solicitud_recurso(self, solicitud:SolicitudRecurso):
         # TODO: implementar lógica
         pass
 
-    def asignar_job(job: Job):
+    def asignar_job(self, job: Job):
         # TODO: implementar logica
         pass
+
+    def finalizar_job(self, nodo: str, job: str):
+        for job_asignado in self.procesos_asignados[nodo]:
+            if job_asignado.nombre == job:
+                self.procesos_asignados[nodo].remove(job_asignado)
+                return
