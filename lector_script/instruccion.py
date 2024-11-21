@@ -14,14 +14,16 @@ class RecursoInstruccion:
         self.tiempo = tiempo
 
 class FalloInstruccion:
-    def __init__(self, tiempo, tiempoRecuperacion):
+    def __init__(self, tiempo, tiempo_recuperacion):
         self.tiempo = tiempo
-        self.tiempoRecuperacion = tiempoRecuperacion
+        self.tiempo_recuperacion = tiempo_recuperacion
 
 class Instruccion:
     recursos: List[RecursoInstruccion]
+    fallos: List[FalloInstruccion]
     def __init__(self, tipo: TipoInstruccion, nombre: str, tiempo: int):
         self.tipo = tipo
         self.nombre = nombre
         self.tiempo = tiempo
         self.recursos = []
+        self.fallos = []
