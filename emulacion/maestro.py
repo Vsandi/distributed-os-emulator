@@ -49,6 +49,10 @@ class SistemaMaestro():
         # Registro Jobs Asignados: Backup ante fallos de sistemas
         self.procesos_asignados = {nodo: [] for nodo in nodo}
 
+        self.administrar(instrucciones, timeout)
+
+        
+    def administrar(self, instrucciones, timeout):
         # Contador para timeouts: 
         # En 0 lee instrucciones del script
         # Else: Administra pero no lee instrucciones, bajando 1 por segundo el counter
@@ -87,9 +91,9 @@ class SistemaMaestro():
                 self.manejar_solicitud_recurso(solicitud)
 
             # Revisar jobs
-            for nodo in nodos:
-                if self.nodos[nombre].pipe_trabajos.poll():
-                    job = self.nodos[nombre].pipe_trabajos.recv()
+            for nodo in self.nodos.values():
+                if nodo.pipe_trabajos.poll():
+                    job = nodo.pipe_trabajos.recv()
                     self.finalizar_job(job)
                     
             # Revisar Final de Loop
@@ -104,9 +108,9 @@ class SistemaMaestro():
                 
 
             time.sleep(1)
-            for nombre in nodos:
-                self.nodos[nombre].tiempo_sin_conexion += 1
-                if self.nodos[nombre].tiempo_sin_conexion == timeout:
+            for nombre, nodo in self.nodos.items():
+                nodo.tiempo_sin_conexion += 1
+                if nodo.tiempo_sin_conexion == timeout:
                     self.eliminar_nodo(nombre)
             if len(self.nodos) == 0:
                 break
