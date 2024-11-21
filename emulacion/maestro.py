@@ -1,27 +1,33 @@
 from typing import List, Dict
 import time
 import multiprocessing
-from emulacion.sistema import EstadoSistema
+from emulacion.sistema import Sistema, EstadoSistema
 from emulacion.recurso import Recurso, SolicitudRecurso
 from emulacion.job import Job
 from lector_script import instruccion
 
 class Nodo:
-    def __init__(self, nombre:str, queue_aviso_recurso:multiprocessing.connection, 
+    def __init__(self, proceso: multiprocessing.Process,
                 pipe_trabajos:multiprocessing.connection):
-        self.queue_aviso_recurso = queue_aviso_recurso
+        self.proceso = proceso
         self.pipe_trabajos = pipe_trabajos
         self.trabajos_asignados = []
         self.carga_asignada = 0
         self.tiempo_sin_conexion = 0
+        self.recursos = []
 
     def set_estado(self, estado: EstadoSistema):
+        self.tiempo_sin_conexion = 0
         self.carga_asignada = estado.get_carga()
         self.trabajos_asignados = estado.cola_procesos.append(estado.current_job)
 
 class SistemaMaestro():
-    def __init__(self, nodos:List[str], recursos:List[str], instrucciones:List[instruccion.Instruccion], timeout:int):
-        
+    def __init__(self, nodos:List[str], recursos:List[str], instrucciones:List[instruccion.Instruccion], timeout:int, capacidad_por_nodo:int):
+        # Setear capacidad por nodo
+        self.capacidad_por_nodo = capacidad_por_nodo        
+        # Setear numero maximo de trabajos del sistema
+        self.capacidad_maxima = len(nodos) * capacidad_por_nodo
+
         # Inicializar Cola de Solicitud de Recursos
         self.cola_solicitudes_recursos = multiprocessing.Queue()
 
@@ -43,8 +49,12 @@ class SistemaMaestro():
         # Registro Jobs Asignados: Backup ante fallos de sistemas
         self.procesos_asignados = {nodo: [] for nodo in nodo}
 
+        # Contador para timeouts: 
+        # En 0 lee instrucciones del script
+        # Else: Administra pero no lee instrucciones, bajando 1 por segundo el counter
         timeout_counter = 0
 
+        # Game Loop
         while True:
             # Manejar Instrucciones Hasta Timeout
             if (timeout_counter == 0):
@@ -58,19 +68,21 @@ class SistemaMaestro():
                         self.eliminar_nodo(inst.nombre)
                     elif inst.tipo == instruccion.TipoInstruccion.JOB:
                         self.cola_procesos_sin_asignar.append(Job(inst))
-            
-            # Asignar Trabajos Segun Carga
-            while len(self.cola_procesos_sin_asignar) != 0:
-                self.asignar_job(self.cola_procesos_sin_asignar.pop())
+
+            # Reportar Estado
+
 
             # Manejar llegada de estados
             while not self.conexion_estado.empty():
                 nombre, estado = self.conexion_estado.get()
-                self.nodos[nombre].tiempo_sin_conexion = 0
                 self.nodos[nombre].set_estado(estado)
 
+            # Asignar Trabajos Segun Carga
+            while self.numero_jobs_actuales() < self.capacidad_maxima and len(self.cola_procesos_sin_asignar) != 0:
+                self.asignar_job(self.cola_procesos_sin_asignar.pop())
+
             # Manejar solicitudes recursos
-            while not self.cola_solicitudes_recursos:
+            while not self.cola_solicitudes_recursos.empty():
                 solicitud = self.cola_solicitudes_recursos.get()
                 self.manejar_solicitud_recurso(solicitud)
 
@@ -80,26 +92,40 @@ class SistemaMaestro():
                     job = self.nodos[nombre].pipe_trabajos.recv()
                     self.finalizar_job(job)
                     
-            # TODO Revisar final del loop 
-
+            # Revisar Final de Loop
+            if len(self.cola_procesos_sin_asignar) == 0:
+                procesos_terminados = True
+                for nodo in self.nodos.values():
+                    if len(nodo.trabajos_asignados) != 0:
+                        procesos_terminados = False
+                        break
+                if procesos_terminados:
+                    break
+                
 
             time.sleep(1)
             for nombre in nodos:
                 self.nodos[nombre].tiempo_sin_conexion += 1
                 if self.nodos[nombre].tiempo_sin_conexion == timeout:
                     self.eliminar_nodo(nombre)
+            if len(self.nodos) == 0:
+                break
             timeout_counter = max(0, timeout_counter-1)
 
         # Epilogo
 
     
     def agregar_nodo(self, nombre:str):
-        # TODO: implementar lógica
-        pass
+        conexion_maestro, conexion_nodo = multiprocessing.Pipe()
+        nuevo_proceso = multiprocessing.Process(target=Sistema, args=[nombre, self.recursos, conexion_nodo, self.conexion_estado, self.cola_solicitudes_recursos])
+        self.nodos[nombre] = Nodo(nuevo_proceso, conexion_maestro)
+        self.capacidad_maxima = len(self.nodos) * self.capacidad_por_nodo
 
     def eliminar_nodo(self, nombre:str):
-        # TODO: implementar lógica
-        pass
+        self.nodos[nombre].proceso.terminate()
+        for recurso in self.nodos[nombre].recursos:
+            self.locks_recursos[recurso.nombre] = False
+        self.nodos.pop(nombre)
 
     def manejar_solicitud_recurso(self, solicitud:SolicitudRecurso):
         # TODO: implementar lógica
@@ -109,8 +135,17 @@ class SistemaMaestro():
         # TODO: implementar logica
         pass
 
+    def reportar_estado(self):
+        pass
+
     def finalizar_job(self, nodo: str, job: str):
         for job_asignado in self.procesos_asignados[nodo]:
             if job_asignado.nombre == job:
                 self.procesos_asignados[nodo].remove(job_asignado)
                 return
+            
+    def numero_jobs_actuales(self):
+        contador = 0
+        for nodo in self.nodos.values():
+            contador += len(nodo.trabajos_asignados)
+        return contador
