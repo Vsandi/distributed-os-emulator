@@ -8,9 +8,10 @@ from lector_script import instruccion
 
 class Nodo:
     def __init__(self, proceso: multiprocessing.Process,
-                pipe_trabajos:multiprocessing.connection):
+                pipe_trabajos:multiprocessing.connection, cola_recursos_asignados: multiprocessing.Queue):
         self.proceso = proceso
         self.pipe_trabajos = pipe_trabajos
+        self.cola_recursos_asignados = cola_recursos_asignados
         self.trabajos_asignados = []
         self.carga_asignada = 0
         self.tiempo_sin_conexion = 0
@@ -83,7 +84,7 @@ class SistemaMaestro():
 
             # Asignar Trabajos Segun Carga
             while self.numero_jobs_actuales() < self.capacidad_maxima and len(self.cola_procesos_sin_asignar) != 0:
-                self.asignar_job(self.cola_procesos_sin_asignar.pop())
+                self.asignar_job(self.cola_procesos_sin_asignar.pop(0))
 
             # Manejar solicitudes recursos
             while not self.cola_solicitudes_recursos.empty():
@@ -121,8 +122,9 @@ class SistemaMaestro():
     
     def agregar_nodo(self, nombre:str):
         conexion_maestro, conexion_nodo = multiprocessing.Pipe()
-        nuevo_proceso = multiprocessing.Process(target=Sistema, args=[nombre, self.recursos, conexion_nodo, self.conexion_estado, self.cola_solicitudes_recursos])
-        self.nodos[nombre] = Nodo(nuevo_proceso, conexion_maestro)
+        cola_recursos_asignados = multiprocessing.Queue()
+        nuevo_proceso = multiprocessing.Process(target=Sistema, args=[nombre, self.recursos, conexion_nodo, self.conexion_estado, self.cola_solicitudes_recursos, cola_recursos_asignados])
+        self.nodos[nombre] = Nodo(nuevo_proceso, conexion_maestro, cola_recursos_asignados)
         self.capacidad_maxima = len(self.nodos) * self.capacidad_por_nodo
 
     def eliminar_nodo(self, nombre:str):

@@ -9,6 +9,7 @@ class Recurso:
         self.data = Array(c_char, 256, lock=False)
 
 class SolicitudRecurso:
-    def __init__(self, nodo:str, recurso:str):
+    def __init__(self, nodo:str, recurso:str, liberar=False):
         self.nodo = nodo
         self.recurso = recurso
+        self.liberar = liberar

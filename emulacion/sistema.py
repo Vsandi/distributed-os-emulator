@@ -1,50 +1,56 @@
+import time
 from emulacion.job import Job
-from emulacion.recurso import Recurso, SolicitudRecurso
+from emulacion.recurso import SolicitudRecurso, Recurso
+from multiprocessing import connection, Queue
 from typing import List
-from multiprocessing import connection
 
 class EstadoSistema:
-    def __init__(self, activo:bool, current_job:Job, 
-                cola_procesos:list[Job], disconnected_time:float):
-        self.activo = activo
-        self.current_job = current_job
-        self.cola_procesos = cola_procesos
-        self.disconnected_time = disconnected_time
+    def __init__(self):
+        self.activo = False
+        self.current_job:Job = None
+        self.cola_procesos:List[Job] = []
+        self.disconnected_time:int = 0
     
     def get_carga(self):
         carga = 0
         if self.current_job:
-            carga += self.current_job.tiempo - self.current_job.tiempo_completado
+            carga += self.current_job.get_tiempo_faltante()
         for job in self.cola_procesos:
-            carga += job.tiempo - job.tiempo_completado
+            carga += job.get_tiempo_faltante
         return carga
 
-import time
-from emulacion.job import Job
-from emulacion.recurso import SolicitudRecurso, Recurso
-from multiprocessing import connection
-from typing import List
 
 class Sistema:
     def __init__(self, nombre: str, recursos: List[Recurso], pipe_trabajos: connection,
-                conexion_estado: connection, conexion_solicitudes: connection):
+                conexion_estado: connection, conexion_solicitudes: connection, cola_recursos_asignados: Queue):
         self.nombre = nombre
+        self.estado = EstadoSistema()
         self.recursos = recursos  # Lista de objetos Recurso
         self.pipe_trabajos = pipe_trabajos  # Comunicación con el maestro para recibir trabajos
         self.conexion_estado = conexion_estado  # Comunicación con el maestro para reportar estado
         self.conexion_solicitudes = conexion_solicitudes  # Para enviar solicitudes de recursos
-        self.current_job = None  # Trabajo actual en ejecución
+        self.cola_recursos_asignados = cola_recursos_asignados # Para recibir asignacion de recursos
         self.recursos_asignados = []  # Recursos asignados al trabajo actual
 
         # Bucle principal
         while True:
+            # Recibir recursos del maestro:
+            while not self.cola_recursos_asignados.empty():
+                recurso = self.cola_recursos_asignados.get()
+                self.recursos_asignados.append(recurso)
+
+            # Revisar si hay trabajos en espera:
+            if len(self.estado.cola_procesos) != 0:
+                job = self.estado.cola_procesos.pop(0)
+                self.recibir_job(job)
+
             # Revisar si hay trabajos enviados por el maestro
             if self.pipe_trabajos.poll():  # Si hay algo en el pipe
                 job = self.pipe_trabajos.recv()  # Recibir trabajo
                 self.recibir_job(job)
 
             # Actualizar el tiempo del trabajo actual
-            if self.current_job:
+            if self.estado.current_job:
                 self.ejecutar_job()
 
             # Reportar estado al maestro
@@ -55,69 +61,59 @@ class Sistema:
 
     # Recibe un trabajo y verifica si se puede ejecutar
     def recibir_job(self, job: Job):
-        print(f"{self.nombre} recibió el trabajo {job.nombre}.")
         # Si el trabajo requiere recursos, procesar la solicitud
         if job.recursos:
-            if self.solicitar_recursos(job.recursos):
-                self.current_job = job
-                print(f"{self.nombre} comenzó a procesar el trabajo {job.nombre}.")
+            if set(job.recursos) == set(self.recursos_asignados):
+                self.estado.current_job = job
+                self.estado.activo = True
             else:
-                print(f"{self.nombre} no pudo obtener los recursos para el trabajo {job.nombre}.")
-                self.pipe_trabajos.send(job)  # Reenviar el trabajo al maestro
+                self.solicitar_recursos(job.recursos)
+                self.estado.cola_procesos.append(job)
         else:
             # Si no requiere recursos, se asigna directamente
-            self.current_job = job
-            print(f"{self.nombre} comenzó a procesar el trabajo {job.nombre} (sin recursos).")
+            self.estado.current_job = job
+            self.estado.activo = True
 
     # Solicita los recursos necesarios para ejecutar un trabajo
-    def solicitar_recursos(self, recursos: List[str]) -> bool:
+    def solicitar_recursos(self, recursos: List[str]):
         for recurso in recursos:
             solicitud = SolicitudRecurso(self.nombre, recurso)
             self.conexion_solicitudes.put(solicitud)  # Enviar solicitud al maestro
-            # Esperar respuesta del maestro sobre disponibilidad
-            tiempo_espera = 5  # Máximo n segundos de espera
-            while tiempo_espera > 0:
-                if recurso in [r.nombre for r in self.recursos if r.len.value == 1]:
-                    self.recursos_asignados.append(
-                        next(r for r in self.recursos if r.nombre == recurso)
-                    )
-                    break
-                time.sleep(1)
-                tiempo_espera -= 1
-            else:
-                # No se obtuvieron todos los recursos
-                print(f"{self.nombre} no obtuvo el recurso {recurso} tras esperar.")
+            # # Esperar respuesta del maestro sobre disponibilidad
+            # tiempo_espera = 5  # Máximo n segundos de espera
+            # while tiempo_espera > 0:
+            #     if recurso in [r.nombre for r in self.recursos if r.len.value == 1]:
+            #         self.recursos_asignados.append(
+            #             next(r for r in self.recursos if r.nombre == recurso)
+            #         )
+            #         break
+            #     time.sleep(1)
+            #     tiempo_espera -= 1
+            # else:
+            #     # No se obtuvieron todos los recursos
+            #     print(f"{self.nombre} no obtuvo el recurso {recurso} tras esperar.")
 
     # Libera todos los recursos asignados al trabajo actual
     def liberar_recursos(self):
         for recurso in self.recursos_asignados:
-            recurso.len.value = 0  # Marcar el recurso como disponible
-            print(f"{self.nombre} liberó el recurso {recurso.nombre}.")
+            solicitud = SolicitudRecurso(self.nombre, recurso, liberar=True)
+            self.conexion_solicitudes.put(solicitud)
         self.recursos_asignados = []  # Vaciar la lista de recursos asignados
 
     # Reduce el tiempo restante del trabajo actual y libera recursos al completarlo
     def ejecutar_job(self):
         # Reducir el tiempo restante del trabajo
-        self.current_job.tiempo_completado += 1
-        tiempo_restante = self.current_job.tiempo - self.current_job.tiempo_completado
-        print(f"{self.nombre} ejecutando {self.current_job.nombre}, tiempo restante: {tiempo_restante}s.")
+        self.estado.current_job.tiempo_completado += 1
 
         # Si el trabajo se terminó
-        if tiempo_restante <= 0:
-            print(f"{self.nombre} completó el trabajo {self.current_job.nombre}.")
+        if self.estado.current_job.get_tiempo_restante() <= 0:
             # Liberar recursos asignados
-            for recurso in self.recursos_asignados:
-                recurso.len.value = 0
-                print(f"{self.nombre} liberó el recurso {recurso.nombre}.")
-            self.recursos_asignados = []
+            self.liberar_recursos()                
             # Notificar al maestro que el trabajo se terminó
-            self.conexion_estado.put((self.nombre, self.current_job.nombre))
-            self.current_job = None
+            self.conexion_estado.put((self.nombre, self.estado.current_job.nombre))
+            self.estado.current_job = None
+            self.estado.activo = False
 
     # Reporta el estado actual al maestro
     def reportar_estado(self):
-        estado = {
-            "trabajo_actual": self.current_job.nombre if self.current_job else None,
-            "recursos_asignados": [recurso.nombre for recurso in self.recursos_asignados],
-        }
-        self.conexion_estado.put((self.nombre, estado))
+        self.conexion_estado.put((self.nombre, self.estado))

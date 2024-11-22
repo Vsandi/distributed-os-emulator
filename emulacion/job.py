@@ -18,12 +18,12 @@ class Job:
     def __init__(self, instruccion: Instruccion):
         self.nombre = instruccion.nombre
         self.tiempo = instruccion.tiempo
+        self.tiempo_completado = 0
         self.recursos = [RecursoJob(recurso) for recurso in instruccion.recursos]
         self.recursos = [FalloJob(fallo) for fallo in instruccion.fallos]
     
-    def get_tiempo_faltante():
-        # TODO: implementar lógica, retorna number
-        pass
+    def get_tiempo_faltante(self):
+        return self.tiempo - self.tiempo_completado
 
 class RecursoJob:
     def __init__(self, nombre:str, datos:str, tiempo:float, tiempo_utilizado:float):
