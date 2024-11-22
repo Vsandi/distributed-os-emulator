@@ -114,7 +114,7 @@ class SistemaMaestro():
                     self.finalizar_job(nombre, job)
                     
             # Revisar Final de Loop
-            if len(self.cola_procesos_sin_asignar) == 0 and self.numero_jobs_actuales() == 0:
+            if len(self.cola_procesos_sin_asignar) == 0 and self.numero_jobs_actuales() == 0 and timeout != 0:
                 break
 
             time.sleep(1)
