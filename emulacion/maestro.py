@@ -1,6 +1,9 @@
 from typing import List, Dict
 import time
 import multiprocessing
+from rich.console import Console
+from rich.live import Live
+from logger.logger import Logger
 from emulacion.sistema import Sistema, EstadoSistema
 from emulacion.recurso import Recurso, SolicitudRecurso
 from emulacion.job import Job
@@ -67,71 +70,72 @@ class SistemaMaestro():
 
         
     def administrar(self, instrucciones, timeout):
+        # Rich console
+        consola = Console()
+
         # Contador para timeouts: 
         # En 0 lee instrucciones del script
         # Else: Administra pero no lee instrucciones, bajando 1 por segundo el counter
         timeout_counter = 0
         index_instrucciones = 0
 
+
         # Game Loop
-        while True:
-            # Manejar Instrucciones Hasta Timeout
-            if (timeout_counter == 0):
-                while index_instrucciones < len(instrucciones):
-                    if instrucciones[index_instrucciones].tipo == instruccion.TipoInstruccion.TIMEOUT:
-                        timeout_counter = instrucciones[index_instrucciones].tiempo
-                        break
-                    elif instrucciones[index_instrucciones].tipo == instruccion.TipoInstruccion.NEW:
-                        self.agregar_nodo(instrucciones[index_instrucciones].nombre)
-                    elif instrucciones[index_instrucciones].tipo == instruccion.TipoInstruccion.DISCONNECT:
-                        self.eliminar_nodo(instrucciones[index_instrucciones].nombre)
-                    elif instrucciones[index_instrucciones].tipo == instruccion.TipoInstruccion.JOB:
-                        self.cola_procesos_sin_asignar.append(Job(instrucciones[index_instrucciones]))
-                    index_instrucciones += 1
+        with Live(Logger.generar_tabla(self.nodos), refresh_per_second=1, console=consola) as live:
+            while True:
+                # Manejar Instrucciones Hasta Timeout
+                if (timeout_counter == 0):
+                    while index_instrucciones < len(instrucciones):
+                        if instrucciones[index_instrucciones].tipo == instruccion.TipoInstruccion.TIMEOUT:
+                            timeout_counter = instrucciones[index_instrucciones].tiempo
+                            break
+                        elif instrucciones[index_instrucciones].tipo == instruccion.TipoInstruccion.NEW:
+                            self.agregar_nodo(instrucciones[index_instrucciones].nombre)
+                        elif instrucciones[index_instrucciones].tipo == instruccion.TipoInstruccion.DISCONNECT:
+                            self.eliminar_nodo(instrucciones[index_instrucciones].nombre)
+                        elif instrucciones[index_instrucciones].tipo == instruccion.TipoInstruccion.JOB:
+                            self.cola_procesos_sin_asignar.append(Job(instrucciones[index_instrucciones]))
+                        index_instrucciones += 1
 
-            # Reportar Estado
+                # Reportar Estado
+                live.update(Logger.generar_tabla(self.nodos))
 
+                # Manejar llegada de estados
+                while not self.conexion_estado.empty():
+                    nombre, estado = self.conexion_estado.get()
+                    self.nodos[nombre].set_estado(estado)
 
-            # Manejar llegada de estados
-            while not self.conexion_estado.empty():
-                nombre, estado = self.conexion_estado.get()
-                self.nodos[nombre].set_estado(estado)
+                # Asignar Trabajos Segun Carga
+                while self.numero_jobs_actuales() < self.capacidad_maxima and len(self.cola_procesos_sin_asignar) != 0:
+                    job = self.cola_procesos_sin_asignar.pop()
+                    self.asignar_job(job)
 
-            # Asignar Trabajos Segun Carga
-            while self.numero_jobs_actuales() < self.capacidad_maxima and len(self.cola_procesos_sin_asignar) != 0:
-                job = self.cola_procesos_sin_asignar.pop()
-                self.asignar_job(job)
+                # Manejar solicitudes recursos
+                while not self.cola_solicitudes_recursos.empty():
+                    solicitud = self.cola_solicitudes_recursos.get()
+                    self.manejar_solicitud_recurso(solicitud)
 
-            # Manejar solicitudes recursos
-            while not self.cola_solicitudes_recursos.empty():
-                solicitud = self.cola_solicitudes_recursos.get()
-                self.manejar_solicitud_recurso(solicitud)
+                # Revisar jobs
+                for nodo in self.nodos.values():
+                    if nodo.pipe_trabajos.poll():
+                        nombre, job = nodo.pipe_trabajos.recv()
+                        self.finalizar_job(nombre, job)
+                        
+                # Revisar Final de Loop
+                if len(self.cola_procesos_sin_asignar) == 0 and self.numero_jobs_actuales() == 0 and timeout != 0:
+                    break
 
-            # Revisar jobs
-            for nodo in self.nodos.values():
-                if nodo.pipe_trabajos.poll():
-                    nombre, job = nodo.pipe_trabajos.recv()
-                    self.finalizar_job(nombre, job)
-                    
-            # Revisar Final de Loop
-            if len(self.cola_procesos_sin_asignar) == 0 and self.numero_jobs_actuales() == 0 and timeout != 0:
-                break
+                time.sleep(1)
+                for nombre, nodo in self.nodos.items():
+                    nodo.tiempo_sin_conexion += 1
+                    if nodo.tiempo_sin_conexion >= timeout:
+                        self.eliminar_nodo(nombre)
+                if len(self.nodos) == 0:
+                    break
+                timeout_counter = max(0, timeout_counter-1)
 
-            time.sleep(1)
-            for nombre, nodo in self.nodos.items():
-                nodo.tiempo_sin_conexion += 1
-                if nodo.tiempo_sin_conexion >= timeout:
-                    self.eliminar_nodo(nombre)
-            if len(self.nodos) == 0:
-                break
-            timeout_counter = max(0, timeout_counter-1)
-
-            # Logger
-            for nombre, nodo in self.nodos.items():
-                trabajo = nodo.get_trabajo_actual()
-                if (trabajo):
-                    print(f"{nombre}: working on {trabajo.nombre}")
         # Epilogo
+        consola.print("Todos los trabajos han sido completados! Saliendo de la emulacion...", style="bold green")
         # Print Recursos Content...
         for nodo in list(self.nodos):
             self.eliminar_nodo(nodo)
@@ -189,7 +193,6 @@ class SistemaMaestro():
 
 
     def finalizar_job(self, nodo: str, job: str):
-        print(job)
         for trabajo in self.procesos_asignados[nodo]:
             if trabajo.nombre == job:
                 self.procesos_asignados[nodo].remove(trabajo)
