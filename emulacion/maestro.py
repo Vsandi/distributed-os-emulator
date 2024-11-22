@@ -22,6 +22,12 @@ class Nodo:
         self.carga_asignada = estado.get_carga()
         self.trabajos_asignados = estado.cola_procesos.append(estado.current_job)
 
+    def get_trabajo_actual(self):
+        numero_trabajos = len(self.trabajos_asignados)
+        if numero_trabajos != 0:
+            return self.trabajos_asignados[numero_trabajos-1]
+        return None
+
 class SistemaMaestro():
     def __init__(self, nodos:List[str], recursos:List[str], instrucciones:List[instruccion.Instruccion], timeout:int, capacidad_por_nodo:int):
         # Setear capacidad por nodo
