@@ -171,6 +171,7 @@ class SistemaMaestro():
         # Marcar como ocupado
         self.locks_recursos[solicitud.recurso] = True
         self.nodos[solicitud.nodo].cola_recursos_asignados.put(solicitud.recurso)
+        self.nodos[solicitud.nodo].recursos.append(solicitud.recurso)
 
 
     def asignar_job(self, job: Job):
