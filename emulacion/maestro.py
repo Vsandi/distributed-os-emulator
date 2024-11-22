@@ -20,9 +20,16 @@ class Nodo:
     def set_estado(self, estado: EstadoSistema):
         self.tiempo_sin_conexion = 0
         self.carga_asignada = estado.get_carga()
-        self.trabajos_asignados = estado.cola_procesos.append(estado.current_job)
+        if estado.cola_procesos is not None:
+            self.trabajos_asignados = list(estado.cola_procesos)
+        if estado.current_job is not None:
+            self.trabajos_asignados.append(estado.current_job)
+        else:
+            self.trabajos_asignados = []
 
-    def get_trabajo_actual(self):
+    def get_trabajo_actual(self) -> Job:
+        if not self.trabajos_asignados:
+            return None
         numero_trabajos = len(self.trabajos_asignados)
         if numero_trabajos != 0:
             return self.trabajos_asignados[numero_trabajos-1]
@@ -54,7 +61,7 @@ class SistemaMaestro():
         self.cola_procesos_sin_asignar = []
 
         # Registro Jobs Asignados: Backup ante fallos de sistemas
-        self.procesos_asignados = {nodo: [] for nodo in nodo}
+        self.procesos_asignados: Dict[str, Job] = {nodo: [] for nodo in nodos}
 
         self.administrar(instrucciones, timeout)
 
@@ -64,21 +71,23 @@ class SistemaMaestro():
         # En 0 lee instrucciones del script
         # Else: Administra pero no lee instrucciones, bajando 1 por segundo el counter
         timeout_counter = 0
+        index_instrucciones = 0
 
         # Game Loop
         while True:
             # Manejar Instrucciones Hasta Timeout
             if (timeout_counter == 0):
-                for inst in instrucciones:
-                    if inst.tipo == instruccion.TipoInstruccion.TIMEOUT:
-                        timeout_counter = inst.tiempo
+                while index_instrucciones < len(instrucciones):
+                    if instrucciones[index_instrucciones].tipo == instruccion.TipoInstruccion.TIMEOUT:
+                        timeout_counter = instrucciones[index_instrucciones].tiempo
                         break
-                    elif inst.tipo == instruccion.TipoInstruccion.NEW:
-                        self.agregar_nodo(inst.nombre)
-                    elif inst.tipo == instruccion.TipoInstruccion.DISCONNECT:
-                        self.eliminar_nodo(inst.nombre)
-                    elif inst.tipo == instruccion.TipoInstruccion.JOB:
-                        self.cola_procesos_sin_asignar.append(Job(inst))
+                    elif instrucciones[index_instrucciones].tipo == instruccion.TipoInstruccion.NEW:
+                        self.agregar_nodo(instrucciones[index_instrucciones].nombre)
+                    elif instrucciones[index_instrucciones].tipo == instruccion.TipoInstruccion.DISCONNECT:
+                        self.eliminar_nodo(instrucciones[index_instrucciones].nombre)
+                    elif instrucciones[index_instrucciones].tipo == instruccion.TipoInstruccion.JOB:
+                        self.cola_procesos_sin_asignar.append(Job(instrucciones[index_instrucciones]))
+                    index_instrucciones += 1
 
             # Reportar Estado
 
@@ -90,7 +99,8 @@ class SistemaMaestro():
 
             # Asignar Trabajos Segun Carga
             while self.numero_jobs_actuales() < self.capacidad_maxima and len(self.cola_procesos_sin_asignar) != 0:
-                self.asignar_job(self.cola_procesos_sin_asignar.pop(0))
+                job = self.cola_procesos_sin_asignar.pop()
+                self.asignar_job(job)
 
             # Manejar solicitudes recursos
             while not self.cola_solicitudes_recursos.empty():
@@ -100,31 +110,31 @@ class SistemaMaestro():
             # Revisar jobs
             for nodo in self.nodos.values():
                 if nodo.pipe_trabajos.poll():
-                    job = nodo.pipe_trabajos.recv()
-                    self.finalizar_job(job)
+                    nombre, job = nodo.pipe_trabajos.recv()
+                    self.finalizar_job(nombre, job)
                     
             # Revisar Final de Loop
-            if len(self.cola_procesos_sin_asignar) == 0:
-                procesos_terminados = True
-                for nodo in self.nodos.values():
-                    if len(nodo.trabajos_asignados) != 0:
-                        procesos_terminados = False
-                        break
-                if procesos_terminados:
-                    break
-                
+            if len(self.cola_procesos_sin_asignar) == 0 and self.numero_jobs_actuales() == 0:
+                break
 
             time.sleep(1)
             for nombre, nodo in self.nodos.items():
                 nodo.tiempo_sin_conexion += 1
-                if nodo.tiempo_sin_conexion == timeout:
+                if nodo.tiempo_sin_conexion >= timeout:
                     self.eliminar_nodo(nombre)
             if len(self.nodos) == 0:
                 break
             timeout_counter = max(0, timeout_counter-1)
 
+            # Logger
+            for nombre, nodo in self.nodos.items():
+                trabajo = nodo.get_trabajo_actual()
+                if (trabajo):
+                    print(f"{nombre}: working on {trabajo.nombre}")
         # Epilogo
-
+        # Print Recursos Content...
+        for nodo in list(self.nodos):
+            self.eliminar_nodo(nodo)
     
     def agregar_nodo(self, nombre:str):
         conexion_maestro, conexion_nodo = multiprocessing.Pipe()
@@ -135,6 +145,8 @@ class SistemaMaestro():
         nuevo_proceso.start()
 
     def eliminar_nodo(self, nombre:str):
+        # Pasar jobs a la cola de procesos sin asignar
+        self.cola_procesos_sin_asignar.extend(self.procesos_asignados[nombre])
         # Terminar Proceso
         self.nodos[nombre].proceso.terminate()
         # Marcar recursos como disponible
@@ -142,8 +154,6 @@ class SistemaMaestro():
             self.locks_recursos[recurso.nombre] = False
         # Eliminar nodo de los nodos
         self.nodos.pop(nombre)
-        # Pasar jobs a la cola de procesos sin asignar
-        self.cola_procesos_sin_asignar.extend(self.procesos_asignados[nombre])
         # Eliminar nodo de los procesos asignados
         self.procesos_asignados.pop(nombre)
 
@@ -163,27 +173,32 @@ class SistemaMaestro():
         nodo_con_menor_carga: Nodo = None
         nombre_nodo_con_menor_carga = None
         for nombre, nodo in self.nodos.items():
-            if nodo.carga_asignada == 0:
-                nodo.pipe_trabajos(job)
+            if len(self.procesos_asignados[nombre]) == 0:
+                nodo.pipe_trabajos.send(job)
                 self.procesos_asignados[nombre].append(job)
+                nodo.trabajos_asignados.append(job)
                 return
             
-            if nodo_con_menor_carga.carga_asignada > nodo.carga_asignada:
-                nombre_nodo_con_menor_carga = nombre
+            if nodo_con_menor_carga == None or nodo_con_menor_carga.carga_asignada > nodo.carga_asignada:
                 nodo_con_menor_carga = nodo
+                nombre_nodo_con_menor_carga = nombre
 
-        self.procesos_asignados[nombre].append(job)
-        nodo_con_menor_carga.pipe_trabajos(job)
+        self.procesos_asignados[nombre_nodo_con_menor_carga].append(job)
+        nodo_con_menor_carga.pipe_trabajos.send(job)
+        nodo_con_menor_carga.trabajos_asignados.append(job)
 
 
     def finalizar_job(self, nodo: str, job: str):
-        for job_asignado in self.procesos_asignados[nodo]:
-            if job_asignado.nombre == job:
-                self.procesos_asignados[nodo].remove(job_asignado)
-                return
+        print(job)
+        for trabajo in self.procesos_asignados[nodo]:
+            if trabajo.nombre == job:
+                self.procesos_asignados[nodo].remove(trabajo)
+        for trabajo in self.nodos[nodo].trabajos_asignados:
+            if trabajo.nombre == job:
+                self.nodos[nodo].trabajos_asignados.remove(trabajo)
             
     def numero_jobs_actuales(self):
         contador = 0
-        for nodo in self.nodos.values():
-            contador += len(nodo.trabajos_asignados)
+        for trabajos in self.procesos_asignados.values():
+            contador += len(trabajos)
         return contador

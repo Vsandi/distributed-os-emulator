@@ -16,7 +16,7 @@ class EstadoSistema:
         if self.current_job:
             carga += self.current_job.get_tiempo_faltante()
         for job in self.cola_procesos:
-            carga += job.get_tiempo_faltante
+            carga += job.get_tiempo_faltante()
         return carga
 
 
@@ -39,18 +39,18 @@ class Sistema:
                 recurso = self.cola_recursos_asignados.get()
                 self.recursos_asignados.append(recurso)
 
-            # Revisar si hay trabajos en espera:
-            if len(self.estado.cola_procesos) != 0:
-                job = self.estado.cola_procesos.pop(0)
-                self.recibir_job(job)
-
             # Revisar si hay trabajos enviados por el maestro
-            if self.pipe_trabajos.poll():  # Si hay algo en el pipe
+            while self.pipe_trabajos.poll():  # Si hay algo en el pipe
                 job = self.pipe_trabajos.recv()  # Recibir trabajo
+                self.estado.cola_procesos.append(job)
+
+            # Revisar si hay trabajos en espera y el sistema esta inactivo:
+            if not self.estado.activo and len(self.estado.cola_procesos) != 0:
+                job = self.estado.cola_procesos.pop()
                 self.recibir_job(job)
 
             # Actualizar el tiempo del trabajo actual
-            if self.estado.current_job:
+            if self.estado.activo:
                 self.ejecutar_job()
 
             # Reportar estado al maestro
@@ -62,7 +62,7 @@ class Sistema:
     # Recibe un trabajo y verifica si se puede ejecutar
     def recibir_job(self, job: Job):
         # Si el trabajo requiere recursos, procesar la solicitud
-        if job.recursos:
+        if len(job.recursos) > 0:
             if set(job.recursos) == set(self.recursos_asignados):
                 self.estado.current_job = job
                 self.estado.activo = True
@@ -106,11 +106,11 @@ class Sistema:
         self.estado.current_job.tiempo_completado += 1
 
         # Si el trabajo se terminó
-        if self.estado.current_job.get_tiempo_restante() <= 0:
+        if self.estado.current_job.get_tiempo_faltante() <= 0:
             # Liberar recursos asignados
             self.liberar_recursos()                
             # Notificar al maestro que el trabajo se terminó
-            self.conexion_estado.put((self.nombre, self.estado.current_job.nombre))
+            self.pipe_trabajos.send((self.nombre, self.estado.current_job.nombre))
             self.estado.current_job = None
             self.estado.activo = False
 
