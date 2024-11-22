@@ -126,23 +126,49 @@ class SistemaMaestro():
         nuevo_proceso = multiprocessing.Process(target=Sistema, args=[nombre, self.recursos, conexion_nodo, self.conexion_estado, self.cola_solicitudes_recursos, cola_recursos_asignados])
         self.nodos[nombre] = Nodo(nuevo_proceso, conexion_maestro, cola_recursos_asignados)
         self.capacidad_maxima = len(self.nodos) * self.capacidad_por_nodo
+        nuevo_proceso.start()
 
     def eliminar_nodo(self, nombre:str):
+        # Terminar Proceso
         self.nodos[nombre].proceso.terminate()
+        # Marcar recursos como disponible
         for recurso in self.nodos[nombre].recursos:
             self.locks_recursos[recurso.nombre] = False
+        # Eliminar nodo de los nodos
         self.nodos.pop(nombre)
+        # Pasar jobs a la cola de procesos sin asignar
+        self.cola_procesos_sin_asignar.extend(self.procesos_asignados[nombre])
+        # Eliminar nodo de los procesos asignados
+        self.procesos_asignados.pop(nombre)
 
     def manejar_solicitud_recurso(self, solicitud:SolicitudRecurso):
-        # TODO: implementar lógica
-        pass
+        if solicitud.liberar: # Si es para liberar, se libera
+            self.nodos[solicitud.nodo].recursos.pop(solicitud.recurso)
+            self.locks_recursos[solicitud.recurso] = False
+        elif self.locks_recursos[solicitud.recurso]: # Si se ocupa, se revisa que no este ocupado
+            return
+        
+        # Marcar como ocupado
+        self.locks_recursos[solicitud.recurso] = True
+        self.nodos[solicitud.nodo].cola_recursos_asignados.put(solicitud.recurso)
+
 
     def asignar_job(self, job: Job):
-        # TODO: implementar logica
-        pass
+        nodo_con_menor_carga: Nodo = None
+        nombre_nodo_con_menor_carga = None
+        for nombre, nodo in self.nodos.items():
+            if nodo.carga_asignada == 0:
+                nodo.pipe_trabajos(job)
+                self.procesos_asignados[nombre].append(job)
+                return
+            
+            if nodo_con_menor_carga.carga_asignada > nodo.carga_asignada:
+                nombre_nodo_con_menor_carga = nombre
+                nodo_con_menor_carga = nodo
 
-    def reportar_estado(self):
-        pass
+        self.procesos_asignados[nombre].append(job)
+        nodo_con_menor_carga.pipe_trabajos(job)
+
 
     def finalizar_job(self, nodo: str, job: str):
         for job_asignado in self.procesos_asignados[nodo]:
