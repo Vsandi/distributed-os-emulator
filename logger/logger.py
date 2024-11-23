@@ -1,6 +1,5 @@
 from typing import Dict
 from rich.table import Table
-# from emulacion.maestro import Nodo
 
 class Logger:
     def generar_tabla(nodos: Dict[str, any]):
