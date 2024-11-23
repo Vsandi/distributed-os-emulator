@@ -1,3 +1,10 @@
 Job Job1 12
 Job Job2 12
 Job Job3 10
+Timeout 30
+NuevoNodo Juanito
+Job TrabajoDespues1 5
+Job TrabajoDespues2 5
+Job TrabajoDespues3 5
+Job TrabajoDespues4 5
+Job TrabajoDespues5 5

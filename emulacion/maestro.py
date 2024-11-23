@@ -55,16 +55,16 @@ class SistemaMaestro():
         self.recursos = [Recurso(recurso) for recurso in recursos]
         self.locks_recursos = {recurso: False for recurso in recursos}
 
-        # Inicializar Nodos
-        self.nodos: Dict[str, Nodo] = {}
-        for nodo in nodos:
-            self.agregar_nodo(nodo)
+        # Registro Jobs Asignados: Backup ante fallos de sistemas
+        self.procesos_asignados: Dict[str, Job] = {nodo: [] for nodo in nodos}
 
         # Registro de Jobs sin Asignar
         self.cola_procesos_sin_asignar = []
 
-        # Registro Jobs Asignados: Backup ante fallos de sistemas
-        self.procesos_asignados: Dict[str, Job] = {nodo: [] for nodo in nodos}
+        # Inicializar Nodos
+        self.nodos: Dict[str, Nodo] = {}
+        for nodo in nodos:
+            self.agregar_nodo(nodo)
 
         self.administrar(instrucciones, timeout)
 
@@ -81,17 +81,18 @@ class SistemaMaestro():
 
 
         # Game Loop
-        with Live(Logger.generar_tabla(self.nodos), refresh_per_second=1, console=consola) as live:
+        with Live(Logger.generar_tabla(self.nodos), refresh_per_second=1, console=consola, transient=True) as live:
             while True:
                 # Manejar Instrucciones Hasta Timeout
                 if (timeout_counter == 0):
                     while index_instrucciones < len(instrucciones):
                         if instrucciones[index_instrucciones].tipo == instruccion.TipoInstruccion.TIMEOUT:
                             timeout_counter = instrucciones[index_instrucciones].tiempo
+                            index_instrucciones += 1
                             break
-                        elif instrucciones[index_instrucciones].tipo == instruccion.TipoInstruccion.NEW:
+                        elif instrucciones[index_instrucciones].tipo == instruccion.TipoInstruccion.NUEVONODO:
                             self.agregar_nodo(instrucciones[index_instrucciones].nombre)
-                        elif instrucciones[index_instrucciones].tipo == instruccion.TipoInstruccion.DISCONNECT:
+                        elif instrucciones[index_instrucciones].tipo == instruccion.TipoInstruccion.DESCONECTAR:
                             self.eliminar_nodo(instrucciones[index_instrucciones].nombre)
                         elif instrucciones[index_instrucciones].tipo == instruccion.TipoInstruccion.JOB:
                             self.cola_procesos_sin_asignar.append(Job(instrucciones[index_instrucciones]))
@@ -122,7 +123,7 @@ class SistemaMaestro():
                         self.finalizar_job(nombre, job)
                         
                 # Revisar Final de Loop
-                if len(self.cola_procesos_sin_asignar) == 0 and self.numero_jobs_actuales() == 0 and timeout != 0:
+                if len(self.cola_procesos_sin_asignar) == 0 and self.numero_jobs_actuales() == 0 and timeout_counter == 0:
                     break
 
                 time.sleep(1)
@@ -145,6 +146,7 @@ class SistemaMaestro():
         cola_recursos_asignados = multiprocessing.Queue()
         nuevo_proceso = multiprocessing.Process(target=Sistema, args=[nombre, self.recursos, conexion_nodo, self.conexion_estado, self.cola_solicitudes_recursos, cola_recursos_asignados])
         self.nodos[nombre] = Nodo(nuevo_proceso, conexion_maestro, cola_recursos_asignados)
+        self.procesos_asignados[nombre] = []
         self.capacidad_maxima = len(self.nodos) * self.capacidad_por_nodo
         nuevo_proceso.start()
 

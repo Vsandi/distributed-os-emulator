@@ -1,5 +1,5 @@
 from typing import List
-from lector_script.instruccion import Instruccion, RecursoInstruccion, FalloInstruccion
+from lector_script.instruccion import Instruccion, RecursoInstruccion
 
 class RecursoJob:
     def __init__(self, recurso: RecursoInstruccion):
