@@ -1,5 +1,5 @@
 import time
-from lector_script.instruccion import Instruccion, TipoInstruccion, RecursoInstruccion, FalloInstruccion
+from lector_script.instruccion import Instruccion, TipoInstruccion, RecursoInstruccion
 from typing import List
 
 class LectorInstrucciones:
@@ -22,8 +22,7 @@ class LectorInstrucciones:
                 if partes[i] == "--recurso":
                     nombre_recurso = partes[i + 1]
                     datos = partes[i + 2]
-                    tiempo_recurso = int(partes[i + 3])
-                    recurso = RecursoInstruccion(nombre_recurso, datos, tiempo_recurso)
+                    recurso = RecursoInstruccion(nombre_recurso, datos)
                     instruccion.recursos.append(recurso)
 
             instrucciones.append(instruccion)

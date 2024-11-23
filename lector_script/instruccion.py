@@ -8,10 +8,9 @@ class TipoInstruccion(Enum):
     TIMEOUT = 4
 
 class RecursoInstruccion:
-    def __init__(self, nombre: str, datos: str, tiempo: int):
+    def __init__(self, nombre: str, datos: str):
         self.nombre = nombre
         self.datos = datos
-        self.tiempo = tiempo
 
 class FalloInstruccion:
     def __init__(self, tiempo, tiempo_recuperacion):
@@ -26,4 +25,3 @@ class Instruccion:
         self.nombre = nombre
         self.tiempo = tiempo
         self.recursos = []
-        self.fallos = []
