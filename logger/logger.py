@@ -15,7 +15,10 @@ class Logger:
             job = nodo.get_trabajo_actual()
             if job is not None:
                 progress_percentage = ((job.tiempo_completado/job.tiempo)*100)
-                recursos = ", ".join(job.recursos)
+                nombres_recursos = []
+                for recurso in job.recursos:
+                    nombres_recursos.append(recurso.nombre)
+                recursos = ", ".join(nombres_recursos)
                 table.add_row(
                     nombre,
                     "Activo",

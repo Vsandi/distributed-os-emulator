@@ -157,7 +157,7 @@ class SistemaMaestro():
         self.nodos[nombre].proceso.terminate()
         # Marcar recursos como disponible
         for recurso in self.nodos[nombre].recursos:
-            self.locks_recursos[recurso.nombre] = False
+            self.locks_recursos[recurso] = False
         # Eliminar nodo de los nodos
         self.nodos.pop(nombre)
         # Eliminar nodo de los procesos asignados
@@ -165,7 +165,7 @@ class SistemaMaestro():
 
     def manejar_solicitud_recurso(self, solicitud:SolicitudRecurso):
         if solicitud.liberar: # Si es para liberar, se libera
-            self.nodos[solicitud.nodo].recursos.pop(solicitud.recurso)
+            self.nodos[solicitud.nodo].recursos.remove(solicitud.recurso)
             self.locks_recursos[solicitud.recurso] = False
         elif self.locks_recursos[solicitud.recurso]: # Si se ocupa, se revisa que no este ocupado
             return

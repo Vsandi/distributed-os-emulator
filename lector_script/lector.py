@@ -10,10 +10,10 @@ class LectorInstrucciones:
 
         for linea in lineas:
             linea = linea.strip()
-            partes = linea.split(" ")
+            partes = linea.split()
 
             tipo = TipoInstruccion[partes[0].upper()]
-            nombre = partes[1]
+            nombre = partes[1] 
             tiempo = None 
             if (tipo == TipoInstruccion.TIMEOUT):
                 tiempo = int(partes[1])
@@ -21,8 +21,7 @@ class LectorInstrucciones:
                 tiempo = int(partes[2])
 
             instruccion = Instruccion(tipo, nombre, tiempo)
-
-            for i in range(3, len(partes), 4):
+            for i in range(3, len(partes), 3):
                 if partes[i] == "--recurso":
                     nombre_recurso = partes[i + 1]
                     datos = partes[i + 2]

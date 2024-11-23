@@ -48,7 +48,7 @@ class Sistema:
             if not self.estado.activo and len(self.estado.cola_procesos) != 0:
                 job = self.estado.cola_procesos.pop()
                 self.recibir_job(job)
-
+            
             # Actualizar el tiempo del trabajo actual
             if self.estado.activo:
                 self.ejecutar_job()
@@ -63,35 +63,19 @@ class Sistema:
     def recibir_job(self, job: Job):
         # Si el trabajo requiere recursos, procesar la solicitud
         if len(job.recursos) > 0:
-            if set(job.recursos) == set(self.recursos_asignados):
-                self.estado.current_job = job
-                self.estado.activo = True
-            else:
-                self.solicitar_recursos(job.recursos)
-                self.estado.cola_procesos.append(job)
+            self.solicitar_recursos(job.recursos)
+            self.estado.current_job = job
+            self.estado.activo = True
         else:
             # Si no requiere recursos, se asigna directamente
             self.estado.current_job = job
             self.estado.activo = True
 
     # Solicita los recursos necesarios para ejecutar un trabajo
-    def solicitar_recursos(self, recursos: List[str]):
+    def solicitar_recursos(self, recursos):
         for recurso in recursos:
-            solicitud = SolicitudRecurso(self.nombre, recurso)
-            self.conexion_solicitudes.put(solicitud)  # Enviar solicitud al maestro
-            # # Esperar respuesta del maestro sobre disponibilidad
-            # tiempo_espera = 5  # Máximo n segundos de espera
-            # while tiempo_espera > 0:
-            #     if recurso in [r.nombre for r in self.recursos if r.len.value == 1]:
-            #         self.recursos_asignados.append(
-            #             next(r for r in self.recursos if r.nombre == recurso)
-            #         )
-            #         break
-            #     time.sleep(1)
-            #     tiempo_espera -= 1
-            # else:
-            #     # No se obtuvieron todos los recursos
-            #     print(f"{self.nombre} no obtuvo el recurso {recurso} tras esperar.")
+            solicitud = SolicitudRecurso(self.nombre, recurso.nombre)
+            self.conexion_solicitudes.put(solicitud)
 
     # Libera todos los recursos asignados al trabajo actual
     def liberar_recursos(self):

@@ -1,5 +1,5 @@
-Job Job1 12
-Job Job2 12
+Job Job1 12 --recurso Recurso1 Datos --recurso Recurso2 Datos
+Job Job2 12 --recurso Recurso1 Datos
 Job Job3 10
 Timeout 30
 NuevoNodo Juanito
