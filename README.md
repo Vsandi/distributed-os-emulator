@@ -4,6 +4,16 @@ Se basa en una emulación de un sistema distribuido donde los diferentes sistema
 
 ## Otros detalles
 
+### Uso y Ayuda
+#### Ejemplo uso
+```shell
+python3 main.py ./instrucciones.txt 100 3 --nodo Nodo1 --nodo Nodo2 --recurso Recurso1 --recurso Recurso2
+```
+#### Ayuda
+Se puede ver la descripcion con el siguiente commando:
+```shell
+python3 main.py --help
+```
 ### Link al Repositorio
 https://github.com/Vsandi/distributed-os-emulator
 ### Diseño
