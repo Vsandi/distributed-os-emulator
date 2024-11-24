@@ -61,11 +61,17 @@ class Sistema:
 
     # Recibe un trabajo y verifica si se puede ejecutar
     def recibir_job(self, job: Job):
-        # Si el trabajo requiere recursos, procesar la solicitud
+        # Si el trabajo requiere recursos, ver si estan o mandar la solicitud
         if len(job.recursos) > 0:
-            self.solicitar_recursos(job.recursos)
-            self.estado.current_job = job
-            self.estado.activo = True
+
+            if not self.__recursosSuficientes(job):
+                # Si no tiene los recursos, se solicitan
+                self.solicitar_recursos(job.recursos)
+                self.estado.cola_procesos.append(job)
+            else:
+                # Si tiene los recursos se actua
+                self.estado.current_job = job
+                self.estado.activo = True
         else:
             # Si no requiere recursos, se asigna directamente
             self.estado.current_job = job
@@ -101,3 +107,9 @@ class Sistema:
     # Reporta el estado actual al maestro
     def reportar_estado(self):
         self.conexion_estado.put((self.nombre, self.estado))
+
+    def __recursosSuficientes(self, job: Job):
+        for recurso in job.recursos:
+            if recurso.nombre not in self.recursos_asignados:
+                return False
+        return True

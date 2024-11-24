@@ -16,6 +16,7 @@ class Nodo:
         self.pipe_trabajos = pipe_trabajos
         self.cola_recursos_asignados = cola_recursos_asignados
         self.trabajos_asignados = []
+        self.trabajo_actual = None
         self.carga_asignada = 0
         self.tiempo_sin_conexion = 0
         self.recursos = []
@@ -27,16 +28,12 @@ class Nodo:
             self.trabajos_asignados = list(estado.cola_procesos)
         if estado.current_job is not None:
             self.trabajos_asignados.append(estado.current_job)
+            self.trabajo_actual = estado.current_job
         else:
             self.trabajos_asignados = []
 
     def get_trabajo_actual(self) -> Job:
-        if not self.trabajos_asignados:
-            return None
-        numero_trabajos = len(self.trabajos_asignados)
-        if numero_trabajos != 0:
-            return self.trabajos_asignados[numero_trabajos-1]
-        return None
+        return self.trabajo_actual
 
 class SistemaMaestro():
     def __init__(self, nodos:List[str], recursos:List[str], instrucciones:List[instruccion.Instruccion], timeout:int, capacidad_por_nodo:int):
@@ -167,6 +164,7 @@ class SistemaMaestro():
         if solicitud.liberar: # Si es para liberar, se libera
             self.nodos[solicitud.nodo].recursos.remove(solicitud.recurso)
             self.locks_recursos[solicitud.recurso] = False
+            return
         elif self.locks_recursos[solicitud.recurso]: # Si se ocupa, se revisa que no este ocupado
             return
         
@@ -196,6 +194,7 @@ class SistemaMaestro():
 
 
     def finalizar_job(self, nodo: str, job: str):
+        self.nodos[nodo].trabajo_actual = None
         for trabajo in self.procesos_asignados[nodo]:
             if trabajo.nombre == job:
                 self.procesos_asignados[nodo].remove(trabajo)
