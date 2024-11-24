@@ -20,11 +20,14 @@ https://github.com/Vsandi/distributed-os-emulator
 ![Diseño Sistema](./public/diseno.png)
 
 ## Ejemplos
-### Distribucion correcta del trabajo
+### Distribucion correcta del trabajo, Manejo correcto de Recursos y Adición de Nodos
+[![](https://markdown-videos-api.jorgenkh.no/youtube/0rsdn4iTmdU)](https://youtu.be/0rsdn4iTmdU)
 
-### Adicion de Nodos
-
+Se puede evidenciar como el sistema maneja las instrucciones en el archivo ```instrucciones.txt```. En principio existen dos nodos y se reciben 3 trabajos. El trabajo 1 y el trabajo 2 ocupan el mismo recurso, por lo que el sistema nodo 2 espera que el nodo 1 termine el trabajo 1 para seguir. Tambien se puede ver como se puede añadir un tercer nodo.
 ### Manejo de Desconexiones
+[![](https://markdown-videos-api.jorgenkh.no/youtube/-Q2yMUYXCjI)](https://youtu.be/-Q2yMUYXCjI)
+
+Se puede evidenciar cómo el sistema maneja la desconexion de un nodo, ejecutando el archivo ```desconexion.txt```. En este caso hay dos nodos y 3 trabajos. Se puede ver como al primer nodo se le asigna el trabajo 1 con los recursos Recurso1 y Recurso2, y posteriormente sufre una desconexion. Que en este caso, el sistema reasigna los trabajos al otro nodo y libera los recursos para su uso. En este caso, al nodo 2 se le asignan los trabajos Trajo1 y Trabajo3 que estaban asignados al nodo 1.
 
 ## Problemas conocidos
 

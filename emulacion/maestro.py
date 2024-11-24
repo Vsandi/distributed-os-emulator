@@ -101,7 +101,8 @@ class SistemaMaestro():
                 # Manejar llegada de estados
                 while not self.conexion_estado.empty():
                     nombre, estado = self.conexion_estado.get()
-                    self.nodos[nombre].set_estado(estado)
+                    if nombre in self.nodos:
+                        self.nodos[nombre].set_estado(estado)
 
                 # Asignar Trabajos Segun Carga
                 while self.numero_jobs_actuales() < self.capacidad_maxima and len(self.cola_procesos_sin_asignar) != 0:
